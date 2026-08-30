@@ -1,1 +1,1 @@
-export default {content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{}},plugins:[]}
+export default {content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{fontFamily:{sans:['Space Grotesk','sans-serif'],mono:['DM Mono','monospace']}}},plugins:[]} 
