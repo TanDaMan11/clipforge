@@ -7,11 +7,13 @@ const stamp = (n: number) => { const s = Math.max(0, Math.round(n)); return `${S
 export default function App() {
   const [url, setUrl] = useState(''); const [clips, setClips] = useState<Clip[]>([]); const [selected, setSelected] = useState<Clip | null>(null); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [videoId, setVideoId] = useState('');
   async function load() {
-    setClips([]); setSelected(null); setMessage(''); const id = getYouTubeId(url);
-    if (!id) { setMessage('Video not found or unavailable. Please check the YouTube URL.'); return; }
+    // Reset every analysis result before validating or starting a new request.
+    setClips([]); setSelected(null); setMessage(''); setVideoId('');
+    const id = getYouTubeId(url);
+    if (!id) { setClips([]); setMessage('Video not found or unavailable. Please check the YouTube URL.'); return; }
     setBusy(true); setMessage('Verifying video metadata...');
     try { const meta = await fetchMetadata(id); setMessage(`Analyzing “${meta.title}” by ${meta.author}...`); const result = (await analyzeVideo(meta)).map(c => ({ ...c, videoId: id })); setVideoId(id); setClips(result); setSelected(result[0] || null); setMessage(`Generated ${result.length} clips for “${meta.title}”.`); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Video not found or unavailable. Please check the YouTube URL.'); }
+    catch (error) { setClips([]); setSelected(null); setVideoId(''); setMessage(error instanceof Error ? error.message : 'Video not found or unavailable. Please check the YouTube URL.'); }
     finally { setBusy(false); }
   }
   const active = selected; const embed = active && videoId ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(active.startTime)}&autoplay=1&rel=0` : '';
