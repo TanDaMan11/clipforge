@@ -5,18 +5,62 @@ import JSZip from 'jszip';
 type C = { title: string; hook: string; virality_score: number; reasoning: string; start_time: number; end_time: number; segment_text: string };
 const demo: C[] = [{ title: 'The Mind-Blowing Truth', hook: 'Nobody tells you this…', virality_score: 94, reasoning: 'Curiosity gap and emotional payoff.', start_time: 42, end_time: 68, segment_text: 'The biggest shift happens when you stop waiting and start shipping.' }];
 
-// Accept every supported YouTube host/path while keeping only the canonical 11-character ID.
+const YOUTUBE_ID = '[a-zA-Z0-9_-]{11}';
+const BROAD_ID_PATTERN = new RegExp(`(?:v=|/v/|youtu\\.be/|/shorts/|/embed/|/live/|%3Dv%3D|%3D)(${YOUTUBE_ID})`, 'i');
+const DIRECT_ID_PATTERN = new RegExp(`^${YOUTUBE_ID}$`);
+
+function repeatedlyDecode(value: string): string {
+  let decoded = value;
+  for (let i = 0; i < 5; i += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return decoded;
+}
+
+// Accept raw, encoded, Google redirect, tracked, and all common YouTube URL forms.
 export function getYouTubeId(value: string): string {
+  const decoded = repeatedlyDecode(value.trim());
+  const broadMatch = decoded.match(BROAD_ID_PATTERN)?.[1];
+  if (broadMatch) return broadMatch;
+  if (DIRECT_ID_PATTERN.test(decoded)) return decoded;
+
+  const candidates = [decoded];
   try {
-    const url = new URL(value.trim());
-    const host = url.hostname.toLowerCase().replace(/^www\./, '');
-    if (!['youtube.com', 'm.youtube.com', 'youtu.be'].includes(host)) return '';
-    if (host === 'youtu.be') return (url.pathname.slice(1).match(/^[A-Za-z0-9_-]{11}/)?.[0] ?? '');
-    const queryId = url.searchParams.get('v')?.match(/^[A-Za-z0-9_-]{11}/)?.[0];
-    if (queryId) return queryId;
-    const pathId = url.pathname.match(/^\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/i)?.[1];
-    return pathId ?? '';
-  } catch { return ''; }
+    const parsed = new URL(decoded.includes('://') ? decoded : `https://${decoded}`);
+    const host = parsed.hostname.toLowerCase().replace(/^www\\./, '');
+    if (host === 'google.com' || host === 'google.co.uk' || host.endsWith('.google.com')) {
+      for (const key of ['url', 'q']) {
+        const target = parsed.searchParams.get(key);
+        if (target) candidates.push(repeatedlyDecode(target));
+      }
+    }
+  } catch { /* broad matching below handles malformed search-result URLs */ }
+
+  for (const candidate of candidates) {
+    const match = candidate.match(BROAD_ID_PATTERN)?.[1];
+    if (match) return match;
+    if (DIRECT_ID_PATTERN.test(candidate)) return candidate;
+    try {
+      const url = new URL(candidate.includes('://') ? candidate : `https://${candidate}`);
+      const host = url.hostname.toLowerCase().replace(/^www\\./, '');
+      if (!['youtube.com', 'm.youtube.com', 'youtu.be'].includes(host)) continue;
+      if (host === 'youtu.be') {
+        const id = url.pathname.slice(1).match(new RegExp(`^${YOUTUBE_ID}`))?.[0];
+        if (id) return id;
+      }
+      const queryId = url.searchParams.get('v')?.match(new RegExp(`^${YOUTUBE_ID}`))?.[0];
+      if (queryId) return queryId;
+      const pathId = url.pathname.match(new RegExp(`^/(?:v|shorts|embed|live)/(${YOUTUBE_ID})`, 'i'))?.[1];
+      if (pathId) return pathId;
+    } catch { /* continue with the next candidate */ }
+  }
+  return '';
 }
 
 const decode = (s: string) => { const el = document.createElement('textarea'); el.innerHTML = s; return el.value; };
